@@ -1,0 +1,18 @@
+# فایل‌های تنظیمات حساس (پسورد دیتابیس)
+attendance_app/config.php
+
+# فایل‌های temp و cache
+*.log
+*.tmp
+__pycache__/
+*.pyc
+
+# فایل‌های سیستمی ویندوز
+Thumbs.db
+Desktop.ini
+
+# فایل‌های VS Code
+.vscode/
+
+# پوشه temp_data (اگه بود)
+attendance_project/temp_data/
