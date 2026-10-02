@@ -6,6 +6,11 @@ $pcode_filter = $_GET['pcode'] ?? '';
 $search_filter = $_GET['search'] ?? '';
 $month_filter = $_GET['month'] ?? '1405/06';
 
+// اگه از datalist انتخاب شده
+if (!empty($pcode_filter)) {
+    $search_filter = $pcode_filter;
+}
+
 renderHeader('ترددها');
 ?>
 <h1>⏰ ترددهای پرسنل</h1>
@@ -13,14 +18,41 @@ renderHeader('ترددها');
 <div class="card">
 <form method="get">
     <div class="filter-row">
-        <div>
-            <label>🔍 جستجو (نام یا کد)</label>
-            <input type="text" name="search" value="<?php echo htmlspecialchars($search_filter); ?>" placeholder="نام یا کد پرسنلی..." autofocus>
-            <?php if ($pcode_filter): ?>
-                <input type="hidden" name="pcode" value="<?php echo htmlspecialchars($pcode_filter); ?>">
-            <?php endif; ?>
+        <div style="flex:2;">
+            <label>🔍 جستجو یا انتخاب از لیست</label>
+            <input type="text" name="search" list="personnel_datalist" value="<?php echo htmlspecialchars($search_filter); ?>" 
+                   placeholder="اسم رو تایپ کن یا از لیست انتخاب کن..." autocomplete="off">
+            <datalist id="personnel_datalist">
+                <?php
+                $ps = $conn->query("SELECT PCode, Name FROM personnel ORDER BY CAST(PCode AS UNSIGNED)");
+                while ($p = $ps->fetch_assoc()) {
+                    echo "<option value='" . htmlspecialchars($p['Name']) . "'>کد: " . htmlspecialchars($p['PCode']) . "</option>";
+                }
+                ?>
+            </datalist>
+            <small style="color:#666; display:block; margin-top:5px;">
+                💡 اسم رو تایپ کن یا از لیست انتخاب کن. برای جستجو با کد، عدد رو دقیق بنویس.
+            </small>
         </div>
-        <div><label>ماه</label><input type="text" name="month" value="<?php echo htmlspecialchars($month_filter); ?>" placeholder="1405/06"></div>
+        <div>
+            <label>📅 ماه</label>
+            <select name="month">
+                <?php
+                // ماه‌های 1405 و 1406
+                $years = ['1405', '1406'];
+                $month_names = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+                foreach ($years as $y) {
+                    echo "<optgroup label='سال $y'>";
+                    for ($m = 1; $m <= 12; $m++) {
+                        $val = sprintf('%s/%02d', $y, $m);
+                        $sel = ($month_filter == $val) ? 'selected' : '';
+                        echo "<option value='$val' $sel>" . $month_names[$m-1] . " $y</option>";
+                    }
+                    echo "</optgroup>";
+                }
+                ?>
+            </select>
+        </div>
         <div><button type="submit" class="btn btn-primary">🔍 جستجو</button></div>
         <div><a href="attendance.php" class="btn btn-warning">پاک کردن</a></div>
     </div>
@@ -35,22 +67,21 @@ renderHeader('ترددها');
     <?php
     $where = [];
     
-    // فیلتر دقیق با کد پرسنلی (از دکمه ⏰)
-    if (!empty($pcode_filter)) {
-        $p_escaped = $conn->real_escape_string($pcode_filter);
-        $where[] = "LPAD(a.Prc_PCode, 8, '0') = LPAD('$p_escaped', 8, '0')";
-    }
-    
-    // فیلتر جستجو با نام یا کد
+    // فیلتر جستجو
     if (!empty($search_filter)) {
         $s = $conn->real_escape_string($search_filter);
-        $where[] = "(p.Name LIKE '%$s%' OR a.Prc_PCode LIKE '%$s%')";
+        if (ctype_digit($s)) {
+            $where[] = "(LPAD(a.Prc_PCode, 8, '0') = LPAD('$s', 8, '0'))";
+        } else {
+            $where[] = "p.Name LIKE '%$s%'";
+        }
     }
     
     // فیلتر ماه
     if (!empty($month_filter)) {
         $m = $conn->real_escape_string($month_filter);
         $where[] = "a.Prc_Date LIKE '$m%'";
+        $where[] = "RIGHT(a.Prc_Date, 2) != '00'";
     }
     
     $where_sql = count($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -58,7 +89,7 @@ renderHeader('ترددها');
     $sql = "SELECT a.*, p.Name FROM attendance a 
             LEFT JOIN personnel p ON LPAD(a.Prc_PCode, 8, '0') = LPAD(p.PCode, 8, '0') 
             $where_sql 
-            ORDER BY a.Prc_Date DESC, CAST(a.Prc_PCode AS UNSIGNED) ASC 
+            ORDER BY a.Prc_Date ASC, CAST(a.Prc_PCode AS UNSIGNED) ASC 
             LIMIT 500";
     $res = $conn->query($sql);
     $count = 0;

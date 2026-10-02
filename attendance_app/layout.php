@@ -36,9 +36,35 @@ tr:hover { background: #f7fbff; }
 .flash.err { background: #f8d7da; color: #721c24; }
 .sidebar hr { border-color: #34495e; margin: 15px 0; }
 .sidebar .section-title { padding: 0 20px; color: #95a5a6; font-size: 12px; margin-bottom: 5px; }
-.sidebar .sync-btn { display: block; margin: 15px; padding: 10px; background: #16a085; color: white; text-align: center; border-radius: 4px; text-decoration: none; font-weight: bold; }
+.sidebar .sync-btn { display: block; margin: 15px; padding: 10px; background: #16a085; color: white; text-align: center; border-radius: 4px; text-decoration: none; font-weight: bold; cursor: pointer; border: none; width: calc(100% - 30px); font-family: inherit; font-size: 14px; }
 .sidebar .sync-btn:hover { background: #1abc9c; }
 .sync-info { padding: 0 20px; color: #7f8c8d; font-size: 11px; margin-bottom: 10px; }
+
+/* نوتیفیکیشن شناور */
+#syncToast {
+    display: none;
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2c3e50;
+    color: white;
+    padding: 20px 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    z-index: 9999;
+    min-width: 400px;
+    max-width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    font-size: 13px;
+    transition: opacity 0.5s;
+}
+#syncToast.show { display: block; }
+#syncToast .toast-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; }
+#syncToast .toast-title.success { color: #2ecc71; }
+#syncToast .toast-title.error { color: #e74c3c; }
+#syncToast .toast-log { background: #1a252f; padding: 10px; border-radius: 4px; direction: ltr; text-align: left; font-family: monospace; font-size: 12px; white-space: pre-wrap; margin-top: 10px; max-height: 300px; overflow-y: auto; }
 </style>
 </head>
 <body>
@@ -50,23 +76,98 @@ tr:hover { background: #f7fbff; }
     <a href="attendance.php">⏰ ترددها</a>
     <a href="calculation.php">🧮 محاسبه کارکرد</a>
     <a href="monthly_report.php">📊 گزارش ماهانه</a>
+    <a href="yearly_report.php">📆 گزارش سالانه</a>
     <hr>
     <div class="section-title">تنظیمات</div>
     <a href="departments.php">🏢 بخش‌ها</a>
     <a href="work_groups.php">👷 گروه‌های کاری</a>
     <a href="shifts.php">🕐 شیفت‌ها</a>
     <a href="rules.php">📜 قوانین</a>
+    <a href="general_rules.php">📋 قوانین کلی</a>
     <hr>
     <div class="section-title">تخصیص</div>
     <a href="assign_rule.php">📜 تخصیص قانون</a>
     <a href="assign_work_group.php">👷 تخصیص گروه کاری</a>
     <hr>
-    <a href="sync_now.php" class="sync-btn" onclick="return confirm('همگام‌سازی دستی انجام بشه؟ ممکنه چند ثانیه طول بکشه.')">🔄 همگام‌سازی دستی</a>
+    <button id="syncBtn" class="sync-btn" onclick="doSync()">🔄 همگام‌سازی دستی</button>
     <?php if (isset($_SESSION['auto_sync_time'])): ?>
         <div class="sync-info">آخرین sync خودکار: <?php echo $_SESSION['auto_sync_time']; ?></div>
     <?php endif; ?>
 </aside>
 <main class="content">
+
+<!-- نوتیفیکیشن شناور -->
+<div id="syncToast">
+    <div class="toast-title" id="syncToastTitle"></div>
+    <div id="syncToastLog"></div>
+</div>
+
+<script>
+function doSync() {
+    if (!confirm('همگام‌سازی دستی انجام بشه؟')) return;
+    
+    const btn = document.getElementById('syncBtn');
+    const toast = document.getElementById('syncToast');
+    const toastTitle = document.getElementById('syncToastTitle');
+    const toastLog = document.getElementById('syncToastLog');
+    
+    btn.disabled = true;
+    btn.textContent = '⏳ در حال همگام‌سازی...';
+    
+    // نمایش نوتیفیکیشن
+    toastTitle.className = 'toast-title';
+    toastTitle.textContent = '⏳ در حال همگام‌سازی...';
+    toastLog.innerHTML = '';
+    toast.classList.add('show');
+    toast.style.opacity = '1';
+    
+    fetch('sync_now.php')
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.textContent = '🔄 همگام‌سازی دستی';
+            
+            if (data.ok) {
+                toastTitle.className = 'toast-title success';
+                toastTitle.textContent = '✅ همگام‌سازی با موفقیت انجام شد (' + data.elapsed + ' ثانیه)';
+            } else {
+                toastTitle.className = 'toast-title error';
+                toastTitle.textContent = '❌ خطا در همگام‌سازی';
+            }
+            toastLog.innerHTML = '<div class="toast-log">' + escapeHtml(data.log) + '</div>';
+            
+            // محو شدن بعد از ۲ ثانیه
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                    toast.style.opacity = '1';
+                }, 500);
+            }, 2000);
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.textContent = '🔄 همگام‌سازی دستی';
+            toastTitle.className = 'toast-title error';
+            toastTitle.textContent = '❌ خطای شبکه';
+            toastLog.innerHTML = '<div class="toast-log">' + escapeHtml(String(err)) + '</div>';
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                    toast.style.opacity = '1';
+                }, 500);
+            }, 2000);
+        });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+
 <?php
 }
 function renderFooter() {

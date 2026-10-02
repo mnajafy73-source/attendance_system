@@ -3,7 +3,7 @@ include 'config.php';
 include 'layout.php';
 
 $id = $_GET['id'] ?? '';
-$row = ['ShiftName'=>'', 'Start1'=>'', 'End1'=>'', 'Start2'=>'', 'End2'=>'', 'Start3'=>'', 'End3'=>'', 'ColorCode'=>'1', 'Description'=>''];
+$row = ['ShiftName'=>'', 'Start1'=>'', 'End1'=>'', 'ColorCode'=>'1', 'Description'=>''];
 $isEdit = false;
 
 if (!empty($id)) {
@@ -15,20 +15,18 @@ if (!empty($id)) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data = [
-        'name' => $_POST['ShiftName'],
-        's1' => $_POST['Start1'], 'e1' => $_POST['End1'],
-        's2' => $_POST['Start2'], 'e2' => $_POST['End2'],
-        's3' => $_POST['Start3'], 'e3' => $_POST['End3'],
-        'color' => $_POST['ColorCode'],
-        'desc' => $_POST['Description']
-    ];
+    $name = $_POST['ShiftName'];
+    $s1 = $_POST['Start1'];
+    $e1 = $_POST['End1'];
+    $color = $_POST['ColorCode'];
+    $desc = $_POST['Description'];
+    
     if ($isEdit) {
-        $stmt = $conn->prepare("UPDATE shifts SET ShiftName=?, Start1=?, End1=?, Start2=?, End2=?, Start3=?, End3=?, ColorCode=?, Description=? WHERE ShiftID=?");
-        $stmt->bind_param('sssssssssi', $data['name'], $data['s1'], $data['e1'], $data['s2'], $data['e2'], $data['s3'], $data['e3'], $data['color'], $data['desc'], $id);
+        $stmt = $conn->prepare("UPDATE shifts SET ShiftName=?, Start1=?, End1=?, Start2=NULL, End2=NULL, Start3=NULL, End3=NULL, ColorCode=?, Description=? WHERE ShiftID=?");
+        $stmt->bind_param('sssssi', $name, $s1, $e1, $color, $desc, $id);
     } else {
-        $stmt = $conn->prepare("INSERT INTO shifts (ShiftName, Start1, End1, Start2, End2, Start3, End3, ColorCode, Description) VALUES (?,?,?,?,?,?,?,?,?)");
-        $stmt->bind_param('sssssssss', $data['name'], $data['s1'], $data['e1'], $data['s2'], $data['e2'], $data['s3'], $data['e3'], $data['color'], $data['desc']);
+        $stmt = $conn->prepare("INSERT INTO shifts (ShiftName, Start1, End1, ColorCode, Description) VALUES (?,?,?,?,?)");
+        $stmt->bind_param('sssss', $name, $s1, $e1, $color, $desc);
     }
     $stmt->execute();
     header('Location: shifts.php?msg=saved');
@@ -46,37 +44,20 @@ renderHeader($isEdit ? 'ویرایش شیفت' : 'افزودن شیفت');
         <input type="text" name="ShiftName" value="<?php echo htmlspecialchars($row['ShiftName']); ?>" required placeholder="مثلاً روزکار، شب کار">
     </div>
 
-    <h3>⏰ بازه‌های زمانی</h3>
+    <h3>⏰ بازه زمانی کارکرد عادی</h3>
     <p style="color:#666; font-size:13px;">
+        این بازه، ساعات کارکرد عادی روزانه رو مشخص می‌کنه. مثلاً <code>07:00</code> تا <code>15:00</code>.<br>
         برای ساعت‌هایی که به <strong>روز بعد</strong> می‌رن (بعد از نیمه‌شب)، انتهای ساعت یک علامت <strong>+</strong> بذار. مثال: <code>04:30+</code>
     </p>
 
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
         <div class="form-group">
-            <label>بازه ۱ - از</label>
-            <input type="text" name="Start1" value="<?php echo htmlspecialchars($row['Start1']); ?>" placeholder="08:00">
+            <label>از ساعت</label>
+            <input type="text" name="Start1" value="<?php echo htmlspecialchars($row['Start1']); ?>" placeholder="07:00" required>
         </div>
         <div class="form-group">
-            <label>بازه ۱ - تا</label>
-            <input type="text" name="End1" value="<?php echo htmlspecialchars($row['End1']); ?>" placeholder="12:00">
-        </div>
-
-        <div class="form-group">
-            <label>بازه ۲ - از</label>
-            <input type="text" name="Start2" value="<?php echo htmlspecialchars($row['Start2']); ?>" placeholder="13:00">
-        </div>
-        <div class="form-group">
-            <label>بازه ۲ - تا</label>
-            <input type="text" name="End2" value="<?php echo htmlspecialchars($row['End2']); ?>" placeholder="17:00">
-        </div>
-
-        <div class="form-group">
-            <label>بازه ۳ - از</label>
-            <input type="text" name="Start3" value="<?php echo htmlspecialchars($row['Start3']); ?>" placeholder="18:00">
-        </div>
-        <div class="form-group">
-            <label>بازه ۳ - تا</label>
-            <input type="text" name="End3" value="<?php echo htmlspecialchars($row['End3']); ?>" placeholder="20:00">
+            <label>تا ساعت</label>
+            <input type="text" name="End1" value="<?php echo htmlspecialchars($row['End1']); ?>" placeholder="15:00" required>
         </div>
     </div>
 

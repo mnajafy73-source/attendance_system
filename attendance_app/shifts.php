@@ -25,9 +25,9 @@ renderHeader('شیفت‌ها');
     <tr>
         <th>کد</th>
         <th>نام شیفت</th>
-        <th>بازه ۱</th>
-        <th>بازه ۲</th>
-        <th>بازه ۳</th>
+        <th>ساعت شروع</th>
+        <th>ساعت پایان</th>
+        <th>مدت</th>
         <th>رنگ</th>
         <th>عملیات</th>
     </tr>
@@ -35,17 +35,32 @@ renderHeader('شیفت‌ها');
     $res = $conn->query("SELECT * FROM shifts ORDER BY ShiftID");
     if ($res && $res->num_rows > 0) {
         while ($row = $res->fetch_assoc()) {
-            $r1 = ($row['Start1'] || $row['End1']) ? htmlspecialchars($row['Start1']) . ' تا ' . htmlspecialchars($row['End1']) : '-';
-            $r2 = ($row['Start2'] || $row['End2']) ? htmlspecialchars($row['Start2']) . ' تا ' . htmlspecialchars($row['End2']) : '-';
-            $r3 = ($row['Start3'] || $row['End3']) ? htmlspecialchars($row['Start3']) . ' تا ' . htmlspecialchars($row['End3']) : '-';
+            $start = htmlspecialchars($row['Start1']);
+            $end = htmlspecialchars($row['End1']);
+            
+            // محاسبه مدت زمان
+            $duration = '-';
+            if ($start && $end) {
+                $s = timeToNumHelper($start);
+                $e = timeToNumHelper($end);
+                if ($s > 0 && $e > 0) {
+                    $diff = $e - $s;
+                    if ($diff > 0) {
+                        $h = floor($diff / 60);
+                        $m = $diff % 60;
+                        $duration = $h . ':' . str_pad($m, 2, '0', STR_PAD_LEFT);
+                    }
+                }
+            }
+            
             $color = 'background:' . getShiftColor($row['ColorCode']) . '; color: white; padding: 3px 10px; border-radius: 3px;';
             
             echo "<tr>";
             echo "<td>" . $row['ShiftID'] . "</td>";
             echo "<td>" . htmlspecialchars($row['ShiftName']) . "</td>";
-            echo "<td>" . $r1 . "</td>";
-            echo "<td>" . $r2 . "</td>";
-            echo "<td>" . $r3 . "</td>";
+            echo "<td style='color:#27ae60;'>" . $start . "</td>";
+            echo "<td style='color:#e74c3c;'>" . $end . "</td>";
+            echo "<td>" . $duration . "</td>";
             echo "<td><span style='$color'>" . $row['ColorCode'] . "</span></td>";
             echo "<td class='actions'>";
             echo "<a href='shift_form.php?id=" . $row['ShiftID'] . "' class='btn btn-warning'>✏️</a>";
@@ -84,5 +99,15 @@ function getShiftColor($code) {
     ];
     return $colors[$code] ?? '#95a5a6';
 }
+
+function timeToNumHelper($t) {
+    if (empty($t)) return -1;
+    $plus = (substr($t, -1) === '+') ? 1440 : 0;
+    $t = rtrim($t, '+');
+    $p = explode(':', $t);
+    if (count($p) != 2) return -1;
+    return intval($p[0]) * 60 + intval($p[1]) + $plus;
+}
+
 renderFooter();
 ?>

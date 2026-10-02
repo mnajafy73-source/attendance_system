@@ -21,9 +21,21 @@ renderHeader('لیست پرسنل');
 <div class="card">
 <form method="get">
     <div class="filter-row">
-        <div>
-            <label>🔍 جستجو (نام یا کد پرسنلی)</label>
-            <input type="text" name="search" value="<?php echo htmlspecialchars($search); ?>" placeholder="مثلاً: موسوی یا 1" autofocus>
+        <div style="flex:2;">
+            <label>🔍 جستجو یا انتخاب از لیست</label>
+            <input type="text" name="search" list="personnel_datalist" value="<?php echo htmlspecialchars($search); ?>" 
+                   placeholder="اسم رو تایپ کن یا از لیست انتخاب کن..." autocomplete="off">
+            <datalist id="personnel_datalist">
+                <?php
+                $ps = $conn->query("SELECT PCode, Name FROM personnel ORDER BY CAST(PCode AS UNSIGNED)");
+                while ($p = $ps->fetch_assoc()) {
+                    echo "<option value='" . htmlspecialchars($p['Name']) . "'>کد: " . htmlspecialchars($p['PCode']) . "</option>";
+                }
+                ?>
+            </datalist>
+            <small style="color:#666; display:block; margin-top:5px;">
+                💡 اسم رو تایپ کن یا از لیست انتخاب کن. برای جستجو با کد، عدد رو دقیق بنویس.
+            </small>
         </div>
         <div><button type="submit" class="btn btn-primary">جستجو</button></div>
         <div><a href="personnel.php" class="btn btn-warning">پاک کردن</a></div>
@@ -35,36 +47,50 @@ renderHeader('لیست پرسنل');
     <a href="personnel_form.php" class="btn btn-success">➕ افزودن پرسنل</a>
 </div>
 
-<div class="card">
+<div class="card" style="overflow-x:auto;">
 <table>
     <tr>
         <th>کد پرسنلی</th>
         <th>نام</th>
         <th>بخش</th>
         <th>گروه کاری</th>
-        <th>قانون</th>
+        <th>قانون اختصاصی</th>
+        <th>قانون کلی</th>
         <th>عملیات</th>
     </tr>
     <?php
     $where = '';
     if (!empty($search)) {
         $s = $conn->real_escape_string($search);
-        $where = "WHERE p.Name LIKE '%$s%' OR p.PCode LIKE '%$s%'";
+        if (ctype_digit($s)) {
+            $where = "WHERE p.PCode = '$s'";
+        } else {
+            $where = "WHERE p.Name LIKE '%$s%' OR p.PCode LIKE '%$s%'";
+        }
     }
-    $sql = "SELECT p.*, r.RuleName, w.GroupName FROM personnel p 
-            LEFT JOIN rules r ON p.RuleID = r.RuleID 
+    $sql = "SELECT p.*, 
+                   r1.RuleName AS SpecificRule, 
+                   r2.RuleName AS GeneralRule, 
+                   w.GroupName 
+            FROM personnel p 
+            LEFT JOIN rules r1 ON p.RuleID = r1.RuleID 
+            LEFT JOIN rules r2 ON p.GeneralRuleID = r2.RuleID 
             LEFT JOIN work_groups w ON p.WorkGroupID = w.GroupID 
             $where
             ORDER BY CAST(p.PCode AS UNSIGNED)";
     $res = $conn->query($sql);
     if ($res && $res->num_rows > 0) {
         while ($row = $res->fetch_assoc()) {
+            $sr = $row['SpecificRule'];
+            $gr = $row['GeneralRule'];
+            
             echo "<tr>";
             echo "<td>" . htmlspecialchars($row['PCode']) . "</td>";
             echo "<td>" . htmlspecialchars($row['Name']) . "</td>";
             echo "<td>" . htmlspecialchars($row['Dept']) . "</td>";
             echo "<td>" . htmlspecialchars($row['GroupName'] ?? $row['WorkGroup'] ?? '-') . "</td>";
-            echo "<td>" . ($row['RuleName'] ?: '-') . "</td>";
+            echo "<td style='color:" . ($sr ? '#27ae60' : '#e74c3c') . ";'>" . ($sr ? htmlspecialchars($sr) : '❌ ندارد') . "</td>";
+            echo "<td style='color:" . ($gr ? '#9b59b6' : '#e74c3c') . ";'>" . ($gr ? htmlspecialchars($gr) : '❌ ندارد') . "</td>";
             echo "<td class='actions'>";
             echo "<a href='personnel_form.php?pcode=" . $row['PCode'] . "' class='btn btn-warning' title='ویرایش'>✏️</a>";
             echo "<a href='personnel.php?delete=" . $row['PCode'] . "' class='btn btn-danger' onclick='return confirm(\"مطمئن هستید؟\")' title='حذف'>🗑️</a>";
@@ -73,7 +99,7 @@ renderHeader('لیست پرسنل');
             echo "</td></tr>";
         }
     } else {
-        echo "<tr><td colspan='6' style='text-align:center;'>موردی یافت نشد.</td></tr>";
+        echo "<tr><td colspan='7' style='text-align:center;'>موردی یافت نشد.</td></tr>";
     }
     ?>
 </table>

@@ -4,13 +4,11 @@ include 'layout.php';
 
 $id = $_GET['id'] ?? '';
 $row = [
-    'RuleName'=>'', 'Description'=>'',
-    'DailyWorkMinutes'=>480, 'MinWorkForOvertime'=>0,
-    'UnderworkStart'=>'17:00', 'UnderworkFactor'=>1.00,
-    'OvertimeFactor'=>1.40, 'OvertimeHolidayFactor'=>1.96, 'OvertimeMaxMinutes'=>240, 'MinOvertimeMinutes'=>0,
-    'LeaveFactor'=>1.00, 'LeaveBalanceDays'=>26,
-    'MissionFactor'=>1.00,
-    'NightWorkFactor'=>1.35, 'FridayWorkFactor'=>1.96, 'HolidayWorkFactor'=>1.96
+    'RuleName'=>'', 'Description'=>'', 'MonthlyLeaveHours'=>'17:30',
+    'LeaveHoursNormal'=>'08:00',
+    'LeaveHoursThursday'=>'04:00',
+    'LeaveHoursFriday'=>'08:00',
+    'ShiftNoAttendanceAsLeave'=>1
 ];
 $isEdit = false;
 
@@ -23,18 +21,20 @@ if (!empty($id)) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $fields = ['RuleName','Description','DailyWorkMinutes','MinWorkForOvertime','UnderworkStart','UnderworkFactor','OvertimeFactor','OvertimeHolidayFactor','OvertimeMaxMinutes','MinOvertimeMinutes','LeaveFactor','LeaveBalanceDays','MissionFactor','NightWorkFactor','FridayWorkFactor','HolidayWorkFactor'];
-    $vals = [];
-    foreach ($fields as $f) $vals[$f] = $_POST[$f] ?? '';
+    $name = $_POST['RuleName'];
+    $desc = $_POST['Description'] ?? '';
+    $mlh = $_POST['MonthlyLeaveHours'];
+    $lhn = $_POST['LeaveHoursNormal'];
+    $lht = $_POST['LeaveHoursThursday'];
+    $lhf = $_POST['LeaveHoursFriday'];
+    $snal = isset($_POST['ShiftNoAttendanceAsLeave']) ? 1 : 0;
     
     if ($isEdit) {
-        $stmt = $conn->prepare("UPDATE rules SET RuleName=?, Description=?, DailyWorkMinutes=?, MinWorkForOvertime=?, UnderworkStart=?, UnderworkFactor=?, OvertimeFactor=?, OvertimeHolidayFactor=?, OvertimeMaxMinutes=?, MinOvertimeMinutes=?, LeaveFactor=?, LeaveBalanceDays=?, MissionFactor=?, NightWorkFactor=?, FridayWorkFactor=?, HolidayWorkFactor=? WHERE RuleID=?");
-        $stmt->bind_param('ssiissddiiddidddi',
-            $vals['RuleName'],$vals['Description'],$vals['DailyWorkMinutes'],$vals['MinWorkForOvertime'],$vals['UnderworkStart'],$vals['UnderworkFactor'],$vals['OvertimeFactor'],$vals['OvertimeHolidayFactor'],$vals['OvertimeMaxMinutes'],$vals['MinOvertimeMinutes'],$vals['LeaveFactor'],$vals['LeaveBalanceDays'],$vals['MissionFactor'],$vals['NightWorkFactor'],$vals['FridayWorkFactor'],$vals['HolidayWorkFactor'],$id);
+        $stmt = $conn->prepare("UPDATE rules SET RuleName=?, Description=?, MonthlyLeaveHours=?, LeaveHoursNormal=?, LeaveHoursThursday=?, LeaveHoursFriday=?, ShiftNoAttendanceAsLeave=? WHERE RuleID=?");
+        $stmt->bind_param('ssssssii', $name, $desc, $mlh, $lhn, $lht, $lhf, $snal, $id);
     } else {
-        $stmt = $conn->prepare("INSERT INTO rules (RuleName, Description, DailyWorkMinutes, MinWorkForOvertime, UnderworkStart, UnderworkFactor, OvertimeFactor, OvertimeHolidayFactor, OvertimeMaxMinutes, MinOvertimeMinutes, LeaveFactor, LeaveBalanceDays, MissionFactor, NightWorkFactor, FridayWorkFactor, HolidayWorkFactor) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-        $stmt->bind_param('ssiissddiiddiddd',
-            $vals['RuleName'],$vals['Description'],$vals['DailyWorkMinutes'],$vals['MinWorkForOvertime'],$vals['UnderworkStart'],$vals['UnderworkFactor'],$vals['OvertimeFactor'],$vals['OvertimeHolidayFactor'],$vals['OvertimeMaxMinutes'],$vals['MinOvertimeMinutes'],$vals['LeaveFactor'],$vals['LeaveBalanceDays'],$vals['MissionFactor'],$vals['NightWorkFactor'],$vals['FridayWorkFactor'],$vals['HolidayWorkFactor']);
+        $stmt = $conn->prepare("INSERT INTO rules (RuleName, Description, MonthlyLeaveHours, LeaveHoursNormal, LeaveHoursThursday, LeaveHoursFriday, ShiftNoAttendanceAsLeave, IsGeneral) VALUES (?, ?, ?, ?, ?, ?, ?, 0)");
+        $stmt->bind_param('ssssssi', $name, $desc, $mlh, $lhn, $lht, $lhf, $snal);
     }
     $stmt->execute();
     header('Location: rules.php?msg=saved');
@@ -49,51 +49,61 @@ renderHeader($isEdit ? 'ویرایش قانون' : 'افزودن قانون');
 <form method="post">
     <div class="form-group">
         <label>نام قانون</label>
-        <input type="text" name="RuleName" value="<?php echo htmlspecialchars($row['RuleName']); ?>" required placeholder="مثلاً: قانون عادی">
+        <input type="text" name="RuleName" value="<?php echo htmlspecialchars($row['RuleName']); ?>" required placeholder="مثلاً: قانون نگهبان شب">
     </div>
     <div class="form-group">
-        <label>توضیحات</label>
-        <textarea name="Description" rows="2"><?php echo htmlspecialchars($row['Description']); ?></textarea>
+        <label>توضیحات (اختیاری)</label>
+        <textarea name="Description" rows="2"><?php echo htmlspecialchars($row['Description'] ?? ''); ?></textarea>
     </div>
 
-    <h3>📊 قوانین کارکرد</h3>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
-        <div class="form-group"><label>کار روزانه استاندارد (دقیقه)</label><input type="number" name="DailyWorkMinutes" value="<?php echo $row['DailyWorkMinutes']; ?>"><small>مثلاً 480 = 8 ساعت</small></div>
-        <div class="form-group"><label>حداقل کار برای تعلق اضافه‌کاری (دقیقه)</label><input type="number" name="MinWorkForOvertime" value="<?php echo $row['MinWorkForOvertime']; ?>"></div>
+    <h3 style="color:#9b59b6;">🏖️ مرخصی ماهانه</h3>
+    <div style="background:#f8f0ff; padding:15px; border-radius:6px; border:1px solid #d8b8ff; margin-bottom:15px;">
+        <div class="form-group">
+            <label>مرخصی ماهانه (به ساعت)</label>
+            <input type="text" name="MonthlyLeaveHours" value="<?php echo htmlspecialchars($row['MonthlyLeaveHours']); ?>" placeholder="17:30" required>
+            <small style="color:#666;">مقدار کل مرخصی ماهانه. مثلاً 17:30 = ۱۷ ساعت و ۳۰ دقیقه</small>
+        </div>
     </div>
 
-    <h3>📉 قوانین کم‌کاری</h3>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
-        <div class="form-group"><label>ساعت شروع محاسبه کم‌کاری</label><input type="text" name="UnderworkStart" value="<?php echo $row['UnderworkStart']; ?>" placeholder="17:00"></div>
-        <div class="form-group"><label>ضریب کم‌کاری</label><input type="text" name="UnderworkFactor" value="<?php echo $row['UnderworkFactor']; ?>"><small>مثلاً 1 = کسر کامل</small></div>
+    <h3 style="color:#e74c3c;">📅 محاسبه روزهای بدون تردد</h3>
+    <div style="background:#ffe8e8; padding:15px; border-radius:6px; border:1px solid #ffb8b8;">
+        <div class="form-group" style="margin-bottom:20px;">
+            <label style="display:flex; align-items:flex-start; cursor:pointer; background:white; padding:12px; border-radius:4px;">
+                <input type="checkbox" name="ShiftNoAttendanceAsLeave" value="1" <?php echo !empty($row['ShiftNoAttendanceAsLeave']) ? 'checked' : ''; ?> style="width:auto; margin-left:10px; margin-top:3px;">
+                <span>
+                    <strong>🟢 روزی که شیفت تعریف شده ولی فرد تردد نداشته، مرخصی حساب شود</strong>
+                    <br><small style="color:#666;">مقدار مرخصی از فیلدهای زیر خونده می‌شه.</small>
+                </span>
+            </label>
+        </div>
+        
+        <p style="margin:0 0 15px; color:#666; font-size:13px;">
+            به ازای هر روزی که شیفت داشت ولی نیامد، به اندازه مقدار زیر مرخصی حساب می‌شه:
+        </p>
+        
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px;">
+            <div class="form-group">
+                <label>روزهای عادی هفته</label>
+                <input type="text" name="LeaveHoursNormal" value="<?php echo htmlspecialchars($row['LeaveHoursNormal']); ?>" placeholder="08:00">
+                <small style="color:#666;">پیش‌فرض ۸ ساعت</small>
+            </div>
+            <div class="form-group">
+                <label>روزهای پنجشنبه</label>
+                <input type="text" name="LeaveHoursThursday" value="<?php echo htmlspecialchars($row['LeaveHoursThursday']); ?>" placeholder="04:00">
+                <small style="color:#666;">پیش‌فرض ۴ ساعت</small>
+            </div>
+            <div class="form-group">
+                <label>روزهای جمعه</label>
+                <input type="text" name="LeaveHoursFriday" value="<?php echo htmlspecialchars($row['LeaveHoursFriday']); ?>" placeholder="08:00">
+                <small style="color:#666;">پیش‌فرض ۸ ساعت</small>
+            </div>
+        </div>
     </div>
 
-    <h3>📈 قوانین اضافه‌کاری</h3>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
-        <div class="form-group"><label>ضریب اضافه‌کاری عادی</label><input type="text" name="OvertimeFactor" value="<?php echo $row['OvertimeFactor']; ?>"><small>مثلاً 1.40</small></div>
-        <div class="form-group"><label>ضریب اضافه‌کاری تعطیل/جمعه</label><input type="text" name="OvertimeHolidayFactor" value="<?php echo $row['OvertimeHolidayFactor']; ?>"><small>مثلاً 1.96</small></div>
-        <div class="form-group"><label>حداکثر اضافه‌کاری روزانه (دقیقه)</label><input type="number" name="OvertimeMaxMinutes" value="<?php echo $row['OvertimeMaxMinutes']; ?>"><small>مثلاً 240 = 4 ساعت</small></div>
-        <div class="form-group"><label>حداقل اضافه‌کاری برای تعلق (دقیقه)</label><input type="number" name="MinOvertimeMinutes" value="<?php echo $row['MinOvertimeMinutes']; ?>"></div>
+    <div style="margin-top:20px;">
+        <button type="submit" class="btn btn-success">💾 ذخیره</button>
+        <a href="rules.php" class="btn btn-danger">انصراف</a>
     </div>
-
-    <h3>🏖️ قوانین مرخصی</h3>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
-        <div class="form-group"><label>ضریب مرخصی</label><input type="text" name="LeaveFactor" value="<?php echo $row['LeaveFactor']; ?>"></div>
-        <div class="form-group"><label>مانده مرخصی سالانه (روز)</label><input type="number" name="LeaveBalanceDays" value="<?php echo $row['LeaveBalanceDays']; ?>"></div>
-    </div>
-
-    <h3>✈️ قوانین ماموریت</h3>
-    <div class="form-group"><label>ضریب ماموریت</label><input type="text" name="MissionFactor" value="<?php echo $row['MissionFactor']; ?>"></div>
-
-    <h3>⚙️ قوانین متفرقه</h3>
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px;">
-        <div class="form-group"><label>ضریب شب‌کاری</label><input type="text" name="NightWorkFactor" value="<?php echo $row['NightWorkFactor']; ?>"></div>
-        <div class="form-group"><label>ضریب جمعه‌کاری</label><input type="text" name="FridayWorkFactor" value="<?php echo $row['FridayWorkFactor']; ?>"></div>
-        <div class="form-group"><label>ضریب تعطیل‌کاری</label><input type="text" name="HolidayWorkFactor" value="<?php echo $row['HolidayWorkFactor']; ?>"></div>
-    </div>
-
-    <button type="submit" class="btn btn-success">💾 ذخیره</button>
-    <a href="rules.php" class="btn btn-danger">انصراف</a>
 </form>
 </div>
 <?php renderFooter(); ?>
