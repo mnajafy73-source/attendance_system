@@ -8,7 +8,8 @@ $row = [
     'LeaveHoursNormal'=>'08:00',
     'LeaveHoursThursday'=>'04:00',
     'LeaveHoursFriday'=>'08:00',
-    'ShiftNoAttendanceAsLeave'=>1
+    'ShiftNoAttendanceAsLeave'=>1,
+    'LeaveCalcMethod'=>'diff_total'
 ];
 $isEdit = false;
 
@@ -28,13 +29,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $lht = $_POST['LeaveHoursThursday'];
     $lhf = $_POST['LeaveHoursFriday'];
     $snal = isset($_POST['ShiftNoAttendanceAsLeave']) ? 1 : 0;
+    $lcm = $_POST['LeaveCalcMethod'];
     
     if ($isEdit) {
-        $stmt = $conn->prepare("UPDATE rules SET RuleName=?, Description=?, MonthlyLeaveHours=?, LeaveHoursNormal=?, LeaveHoursThursday=?, LeaveHoursFriday=?, ShiftNoAttendanceAsLeave=? WHERE RuleID=?");
-        $stmt->bind_param('ssssssii', $name, $desc, $mlh, $lhn, $lht, $lhf, $snal, $id);
+        $stmt = $conn->prepare("UPDATE rules SET RuleName=?, Description=?, MonthlyLeaveHours=?, LeaveHoursNormal=?, LeaveHoursThursday=?, LeaveHoursFriday=?, ShiftNoAttendanceAsLeave=?, LeaveCalcMethod=? WHERE RuleID=?");
+        $stmt->bind_param('ssssssisi', $name, $desc, $mlh, $lhn, $lht, $lhf, $snal, $lcm, $id);
     } else {
-        $stmt = $conn->prepare("INSERT INTO rules (RuleName, Description, MonthlyLeaveHours, LeaveHoursNormal, LeaveHoursThursday, LeaveHoursFriday, ShiftNoAttendanceAsLeave, IsGeneral) VALUES (?, ?, ?, ?, ?, ?, ?, 0)");
-        $stmt->bind_param('ssssssi', $name, $desc, $mlh, $lhn, $lht, $lhf, $snal);
+        $stmt = $conn->prepare("INSERT INTO rules (RuleName, Description, MonthlyLeaveHours, LeaveHoursNormal, LeaveHoursThursday, LeaveHoursFriday, ShiftNoAttendanceAsLeave, LeaveCalcMethod, IsGeneral) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)");
+        $stmt->bind_param('ssssssis', $name, $desc, $mlh, $lhn, $lht, $lhf, $snal, $lcm);
     }
     $stmt->execute();
     header('Location: rules.php?msg=saved');
@@ -65,38 +67,66 @@ renderHeader($isEdit ? 'ویرایش قانون' : 'افزودن قانون');
         </div>
     </div>
 
-    <h3 style="color:#e74c3c;">📅 محاسبه روزهای بدون تردد</h3>
+    <h3 style="color:#e74c3c;">📅 محاسبه مرخصی روزهایی که شیفت داشته ولی تردد نداشته</h3>
     <div style="background:#ffe8e8; padding:15px; border-radius:6px; border:1px solid #ffb8b8;">
-        <div class="form-group" style="margin-bottom:20px;">
-            <label style="display:flex; align-items:flex-start; cursor:pointer; background:white; padding:12px; border-radius:4px;">
-                <input type="checkbox" name="ShiftNoAttendanceAsLeave" value="1" <?php echo !empty($row['ShiftNoAttendanceAsLeave']) ? 'checked' : ''; ?> style="width:auto; margin-left:10px; margin-top:3px;">
+        
+        <div class="form-group" style="margin-bottom:0;">
+            <label style="display:flex; align-items:center; cursor:pointer; background:white; padding:12px; border-radius:4px;">
+                <input type="checkbox" name="ShiftNoAttendanceAsLeave" id="snalCheckbox" value="1" 
+                    <?php echo !empty($row['ShiftNoAttendanceAsLeave']) ? 'checked' : ''; ?> 
+                    style="width:auto; margin-left:10px;" onchange="toggleLeaveHours()">
                 <span>
                     <strong>🟢 روزی که شیفت تعریف شده ولی فرد تردد نداشته، مرخصی حساب شود</strong>
-                    <br><small style="color:#666;">مقدار مرخصی از فیلدهای زیر خونده می‌شه.</small>
                 </span>
             </label>
         </div>
         
-        <p style="margin:0 0 15px; color:#666; font-size:13px;">
-            به ازای هر روزی که شیفت داشت ولی نیامد، به اندازه مقدار زیر مرخصی حساب می‌شه:
-        </p>
-        
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px;">
-            <div class="form-group">
-                <label>روزهای عادی هفته</label>
-                <input type="text" name="LeaveHoursNormal" value="<?php echo htmlspecialchars($row['LeaveHoursNormal']); ?>" placeholder="08:00">
-                <small style="color:#666;">پیش‌فرض ۸ ساعت</small>
+        <div id="leaveHoursBox" style="margin-top:20px; padding-top:20px; border-top:1px dashed #ffb8b8; <?php echo empty($row['ShiftNoAttendanceAsLeave']) ? 'display:none;' : ''; ?>">
+            <p style="margin:0 0 15px; color:#666; font-size:13px;">
+                به ازای هر روزی که شیفت داشت ولی نیامد، به اندازه مقدار زیر مرخصی حساب می‌شه:
+            </p>
+            
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px;">
+                <div class="form-group">
+                    <label style="color:#c0392b;">☀️ روزهای عادی هفته</label>
+                    <input type="text" name="LeaveHoursNormal" value="<?php echo htmlspecialchars($row['LeaveHoursNormal']); ?>" placeholder="08:00">
+                </div>
+                <div class="form-group">
+                    <label style="color:#e67e22;">🟠 روزهای پنجشنبه</label>
+                    <input type="text" name="LeaveHoursThursday" value="<?php echo htmlspecialchars($row['LeaveHoursThursday']); ?>" placeholder="04:00">
+                </div>
+                <div class="form-group">
+                    <label style="color:#c0392b;">🔴 روزهای جمعه</label>
+                    <input type="text" name="LeaveHoursFriday" value="<?php echo htmlspecialchars($row['LeaveHoursFriday']); ?>" placeholder="08:00">
+                </div>
             </div>
-            <div class="form-group">
-                <label>روزهای پنجشنبه</label>
-                <input type="text" name="LeaveHoursThursday" value="<?php echo htmlspecialchars($row['LeaveHoursThursday']); ?>" placeholder="04:00">
-                <small style="color:#666;">پیش‌فرض ۴ ساعت</small>
-            </div>
-            <div class="form-group">
-                <label>روزهای جمعه</label>
-                <input type="text" name="LeaveHoursFriday" value="<?php echo htmlspecialchars($row['LeaveHoursFriday']); ?>" placeholder="08:00">
-                <small style="color:#666;">پیش‌فرض ۸ ساعت</small>
-            </div>
+        </div>
+    </div>
+
+    <h3 style="color:#2980b9;">🧮 طریقه محاسبه مرخصی (وقتی پرسنل اومده ولی کمتر از شیفت کار کرده)</h3>
+    <div style="background:#e8f4ff; padding:15px; border-radius:6px; border:1px solid #a8d4ff;">
+        <div class="form-group">
+            <label style="display:flex; align-items:flex-start; cursor:pointer; padding:10px; border-radius:4px; background:white; margin-bottom:10px; border:2px solid <?php echo ($row['LeaveCalcMethod'] == 'diff_total') ? '#3498db' : '#eee'; ?>;">
+                <input type="radio" name="LeaveCalcMethod" value="diff_total" 
+                    <?php echo ($row['LeaveCalcMethod'] == 'diff_total') ? 'checked' : ''; ?> 
+                    style="width:auto; margin-left:10px; margin-top:3px;">
+                <span>
+                    <strong>روش اول: تفاضل کل</strong>
+                    <br><small style="color:#666;">مرخصی = طول شیفت − کارکرد واقعی</small>
+                    <br><small style="color:#888; font-style:italic;">مثال: شیفت ۱۳ ساعت، کارکرد ۹:۳۰ → ۳:۳۰ مرخصی</small>
+                </span>
+            </label>
+            
+            <label style="display:flex; align-items:flex-start; cursor:pointer; padding:10px; border-radius:4px; background:white; border:2px solid <?php echo ($row['LeaveCalcMethod'] == 'entry_exit_diff') ? '#3498db' : '#eee'; ?>;">
+                <input type="radio" name="LeaveCalcMethod" value="entry_exit_diff" 
+                    <?php echo ($row['LeaveCalcMethod'] == 'entry_exit_diff') ? 'checked' : ''; ?> 
+                    style="width:auto; margin-left:10px; margin-top:3px;">
+                <span>
+                    <strong>روش دوم: اختلاف ورود و خروج با شیفت</strong>
+                    <br><small style="color:#666;">مرخصی = (تاخیر ورود) + (تعجیل خروج)</small>
+                    <br><small style="color:#888; font-style:italic;">مثال: شیفت ۱۷:۰۰ تا ۰۶:۰۰، ورود ۱۸:۰۰، خروج ۰۵:۰۰ → ۱ ساعت + ۱ ساعت = ۲ ساعت مرخصی</small>
+                </span>
+            </label>
         </div>
     </div>
 
@@ -106,4 +136,14 @@ renderHeader($isEdit ? 'ویرایش قانون' : 'افزودن قانون');
     </div>
 </form>
 </div>
+
+<script>
+function toggleLeaveHours() {
+    var cb = document.getElementById('snalCheckbox');
+    var box = document.getElementById('leaveHoursBox');
+    if (cb.checked) box.style.display = 'block';
+    else box.style.display = 'none';
+}
+</script>
+
 <?php renderFooter(); ?>

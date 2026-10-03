@@ -10,11 +10,12 @@ $row = [
     'OvertimeCrossDay'=>0,
     'RoundEntryEnabled'=>0,
     'RoundExitEnabled'=>0,
-    'RoundBlockMinutes'=>15,
-    'RoundThresholdMinutes'=>6,
+    'RoundEntryBlockMinutes'=>15,
+    'RoundEntryThresholdMinutes'=>6,
+    'RoundExitBlockMinutes'=>15,
+    'RoundExitThresholdMinutes'=>6,
     'NoShiftAsHoliday'=>1,
     'HourlyLeaveAsLeave'=>1,
-    'ThursdayWorkHours'=>'04:00',
     'LunchEnabled'=>0,
     'LunchStart'=>'13:00',
     'LunchEnd'=>'13:30',
@@ -46,11 +47,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ocd = ($_POST['OvertimeCrossDay'] == '1') ? 1 : 0;
     $ree = isset($_POST['RoundEntryEnabled']) ? 1 : 0;
     $rxe = isset($_POST['RoundExitEnabled']) ? 1 : 0;
-    $rbm = intval($_POST['RoundBlockMinutes']);
-    $rtm = intval($_POST['RoundThresholdMinutes']);
+    $rebm = intval($_POST['RoundEntryBlockMinutes']);
+    $retm = intval($_POST['RoundEntryThresholdMinutes']);
+    $rxbm = intval($_POST['RoundExitBlockMinutes']);
+    $rxtm = intval($_POST['RoundExitThresholdMinutes']);
     $nsah = isset($_POST['NoShiftAsHoliday']) ? 1 : 0;
     $hlal = isset($_POST['HourlyLeaveAsLeave']) ? 1 : 0;
-    $twh = $_POST['ThursdayWorkHours'];
     $lunch_en = isset($_POST['LunchEnabled']) ? 1 : 0;
     $lunch_s = $_POST['LunchStart'];
     $lunch_e = $_POST['LunchEnd'];
@@ -65,19 +67,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $etea_e = $_POST['EveningTeaEnd'];
     
     if ($isEdit) {
-        $stmt = $conn->prepare("UPDATE rules SET RuleName=?, OvertimeBeforeShiftStart=?, OvertimeAfterShiftHours=?, OvertimeCrossDay=?, RoundEntryEnabled=?, RoundExitEnabled=?, RoundBlockMinutes=?, RoundThresholdMinutes=?, NoShiftAsHoliday=?, HourlyLeaveAsLeave=?, ThursdayWorkHours=?, LunchEnabled=?, LunchStart=?, LunchEnd=?, NightDinnerEnabled=?, NightDinnerStart=?, NightDinnerEnd=?, MorningTeaEnabled=?, MorningTeaStart=?, MorningTeaEnd=?, EveningTeaEnabled=?, EveningTeaStart=?, EveningTeaEnd=? WHERE RuleID=?");
-        $stmt->bind_param('sssiiiiiiississsissiisssissi',
-            $name, $obs, $oas, $ocd, $ree, $rxe, $rbm, $rtm,
-            $nsah, $hlal, $twh,
+        $stmt = $conn->prepare("UPDATE rules SET RuleName=?, OvertimeBeforeShiftStart=?, OvertimeAfterShiftHours=?, OvertimeCrossDay=?, RoundEntryEnabled=?, RoundExitEnabled=?, RoundEntryBlockMinutes=?, RoundEntryThresholdMinutes=?, RoundExitBlockMinutes=?, RoundExitThresholdMinutes=?, NoShiftAsHoliday=?, HourlyLeaveAsLeave=?, LunchEnabled=?, LunchStart=?, LunchEnd=?, NightDinnerEnabled=?, NightDinnerStart=?, NightDinnerEnd=?, MorningTeaEnabled=?, MorningTeaStart=?, MorningTeaEnd=?, EveningTeaEnabled=?, EveningTeaStart=?, EveningTeaEnd=? WHERE RuleID=?");
+        // نوع داده‌ها: sss + 10i + ss + i + ss + i + ss + i + ss + i = 25 کاراکتر
+        $stmt->bind_param('sssiiiiiiiiiississississi',
+            $name, $obs, $oas, $ocd, $ree, $rxe, $rebm, $retm, $rxbm, $rxtm,
+            $nsah, $hlal,
             $lunch_en, $lunch_s, $lunch_e,
             $nde, $nds, $nde_e,
             $mtea_en, $mtea_s, $mtea_e,
             $etea_en, $etea_s, $etea_e, $id);
     } else {
-        $stmt = $conn->prepare("INSERT INTO rules (RuleName, IsGeneral, OvertimeBeforeShiftStart, OvertimeAfterShiftHours, OvertimeCrossDay, RoundEntryEnabled, RoundExitEnabled, RoundBlockMinutes, RoundThresholdMinutes, NoShiftAsHoliday, HourlyLeaveAsLeave, ThursdayWorkHours, LunchEnabled, LunchStart, LunchEnd, NightDinnerEnabled, NightDinnerStart, NightDinnerEnd, MorningTeaEnabled, MorningTeaStart, MorningTeaEnd, EveningTeaEnabled, EveningTeaStart, EveningTeaEnd, EntryToleranceMinutes, ExitToleranceMinutes, DailyWorkMinutes) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 480)");
-        $stmt->bind_param('sssiiiiiiississsissiisssiss',
-            $name, $obs, $oas, $ocd, $ree, $rxe, $rbm, $rtm,
-            $nsah, $hlal, $twh,
+        $stmt = $conn->prepare("INSERT INTO rules (RuleName, IsGeneral, OvertimeBeforeShiftStart, OvertimeAfterShiftHours, OvertimeCrossDay, RoundEntryEnabled, RoundExitEnabled, RoundEntryBlockMinutes, RoundEntryThresholdMinutes, RoundExitBlockMinutes, RoundExitThresholdMinutes, NoShiftAsHoliday, HourlyLeaveAsLeave, LunchEnabled, LunchStart, LunchEnd, NightDinnerEnabled, NightDinnerStart, NightDinnerEnd, MorningTeaEnabled, MorningTeaStart, MorningTeaEnd, EveningTeaEnabled, EveningTeaStart, EveningTeaEnd, EntryToleranceMinutes, ExitToleranceMinutes, DailyWorkMinutes) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 480)");
+        // نوع داده‌ها: sss + 10i + ss + i + ss + i + ss + i + ss = 24 کاراکتر
+        $stmt->bind_param('sssiiiiiiiiiississississ',
+            $name, $obs, $oas, $ocd, $ree, $rxe, $rebm, $retm, $rxbm, $rxtm,
+            $nsah, $hlal,
             $lunch_en, $lunch_s, $lunch_e,
             $nde, $nds, $nde_e,
             $mtea_en, $mtea_s, $mtea_e,
@@ -130,23 +134,31 @@ renderHeader($isEdit ? 'ویرایش قانون کلی' : 'افزودن قانو
         </div>
     </div>
 
-    <h3 style="color:#2980b9;">📏 محاسبه ساعت کارکرد پنجشنبه</h3>
-    <div style="background:#e8f4ff; padding:15px; border-radius:6px; border:1px solid #a8d4ff;">
-        <div class="form-group">
-            <label>روز پنجشنبه معادل چند ساعت کارکرد محاسبه شود؟</label>
-            <input type="text" name="ThursdayWorkHours" value="<?php echo htmlspecialchars($row['ThursdayWorkHours']); ?>" placeholder="04:00">
-            <small style="color:#666;">کارکرد مورد انتظار روز پنجشنبه (برای محاسبه اضافه‌کاری/کم‌کاری)</small>
-        </div>
-    </div>
-
     <h3 style="color:#e67e22;">🔄 رند کردن ساعت</h3>
-    <div style="background:#fff8e8; padding:15px; border-radius:6px; border:1px solid #ffd88a;">
+    
+    <!-- رند کردن ورود -->
+    <div style="background:#e8ffe8; padding:15px; border-radius:6px; border:1px solid #a8e8a8; margin-bottom:15px;">
         <div class="form-group">
             <label style="display:flex; align-items:center; cursor:pointer;">
                 <input type="checkbox" name="RoundEntryEnabled" value="1" <?php echo !empty($row['RoundEntryEnabled']) ? 'checked' : ''; ?> style="width:auto; margin-left:10px;">
                 <strong>🟢 رند کردن ساعت ورود</strong>
             </label>
         </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-top:15px;">
+            <div class="form-group">
+                <label>بازه رند ورود (دقیقه)</label>
+                <input type="number" name="RoundEntryBlockMinutes" value="<?php echo $row['RoundEntryBlockMinutes']; ?>">
+            </div>
+            <div class="form-group">
+                <label>آستانه رند ورود (دقیقه)</label>
+                <input type="number" name="RoundEntryThresholdMinutes" value="<?php echo $row['RoundEntryThresholdMinutes']; ?>">
+                <small style="color:#666;">اگه دقیقه از این مقدار بیشتر شد، به بازه بعدی رند می‌شه.</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- رند کردن خروج -->
+    <div style="background:#ffe8e8; padding:15px; border-radius:6px; border:1px solid #ffb8b8;">
         <div class="form-group">
             <label style="display:flex; align-items:center; cursor:pointer;">
                 <input type="checkbox" name="RoundExitEnabled" value="1" <?php echo !empty($row['RoundExitEnabled']) ? 'checked' : ''; ?> style="width:auto; margin-left:10px;">
@@ -154,8 +166,15 @@ renderHeader($isEdit ? 'ویرایش قانون کلی' : 'افزودن قانو
             </label>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-top:15px;">
-            <div class="form-group"><label>بازه رند (دقیقه)</label><input type="number" name="RoundBlockMinutes" value="<?php echo $row['RoundBlockMinutes']; ?>"></div>
-            <div class="form-group"><label>آستانه رند (دقیقه)</label><input type="number" name="RoundThresholdMinutes" value="<?php echo $row['RoundThresholdMinutes']; ?>"></div>
+            <div class="form-group">
+                <label>بازه رند خروج (دقیقه)</label>
+                <input type="number" name="RoundExitBlockMinutes" value="<?php echo $row['RoundExitBlockMinutes']; ?>">
+            </div>
+            <div class="form-group">
+                <label>آستانه رند خروج (دقیقه)</label>
+                <input type="number" name="RoundExitThresholdMinutes" value="<?php echo $row['RoundExitThresholdMinutes']; ?>">
+                <small style="color:#666;">اگه دقیقه از این مقدار بیشتر شد، به بازه بعدی رند می‌شه.</small>
+            </div>
         </div>
     </div>
 
@@ -164,10 +183,7 @@ renderHeader($isEdit ? 'ویرایش قانون کلی' : 'افزودن قانو
         <div class="form-group">
             <label style="display:flex; align-items:flex-start; cursor:pointer;">
                 <input type="checkbox" name="NoShiftAsHoliday" value="1" <?php echo !empty($row['NoShiftAsHoliday']) ? 'checked' : ''; ?> style="width:auto; margin-left:10px; margin-top:3px;">
-                <span>
-                    <strong>⚪ روزی که شیفت تعریف نشده، تعطیل حساب شود</strong>
-                    <br><small style="color:#666;">اگه تیک بخوره، روزهای بدون شیفت تعطیل حساب می‌شن و اگه تردد داشته باشن، اضافه‌کار محاسبه می‌شه.</small>
-                </span>
+                <span><strong>⚪ روزی که شیفت تعریف نشده، تعطیل حساب شود</strong></span>
             </label>
         </div>
         <div class="form-group" style="margin-top:15px;">
@@ -190,7 +206,6 @@ renderHeader($isEdit ? 'ویرایش قانون کلی' : 'افزودن قانو
             <div class="form-group"><label>ساعت شروع ناهار</label><input type="text" name="LunchStart" value="<?php echo htmlspecialchars($row['LunchStart']); ?>"></div>
             <div class="form-group"><label>ساعت پایان ناهار</label><input type="text" name="LunchEnd" value="<?php echo htmlspecialchars($row['LunchEnd']); ?>"></div>
         </div>
-        <small style="color:#666; display:block;">💡 فقط اگه ناهار داخل محدوده اضافه‌کاری باشه، از اضافه‌کار کسر می‌شه.</small>
     </div>
 
     <h3 style="color:#34495e;">🌙 شام (شیفت‌های شب‌کار)</h3>
@@ -205,7 +220,6 @@ renderHeader($isEdit ? 'ویرایش قانون کلی' : 'افزودن قانو
             <div class="form-group"><label>ساعت شروع شام</label><input type="text" name="NightDinnerStart" value="<?php echo htmlspecialchars($row['NightDinnerStart']); ?>" placeholder="00:00"></div>
             <div class="form-group"><label>ساعت پایان شام</label><input type="text" name="NightDinnerEnd" value="<?php echo htmlspecialchars($row['NightDinnerEnd']); ?>" placeholder="00:30"></div>
         </div>
-        <small style="color:#666; display:block;">💡 فقط اگه شام داخل محدوده اضافه‌کاری باشه، از اضافه‌کار کسر می‌شه.</small>
     </div>
 
     <h3 style="color:#27ae60;">☕ چای صبح</h3>

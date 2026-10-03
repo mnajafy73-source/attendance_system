@@ -40,7 +40,6 @@ tr:hover { background: #f7fbff; }
 .sidebar .sync-btn:hover { background: #1abc9c; }
 .sync-info { padding: 0 20px; color: #7f8c8d; font-size: 11px; margin-bottom: 10px; }
 
-/* نوتیفیکیشن شناور */
 #syncToast {
     display: none;
     position: fixed;
@@ -96,7 +95,6 @@ tr:hover { background: #f7fbff; }
 </aside>
 <main class="content">
 
-<!-- نوتیفیکیشن شناور -->
 <div id="syncToast">
     <div class="toast-title" id="syncToastTitle"></div>
     <div id="syncToastLog"></div>
@@ -114,7 +112,6 @@ function doSync() {
     btn.disabled = true;
     btn.textContent = '⏳ در حال همگام‌سازی...';
     
-    // نمایش نوتیفیکیشن
     toastTitle.className = 'toast-title';
     toastTitle.textContent = '⏳ در حال همگام‌سازی...';
     toastLog.innerHTML = '';
@@ -136,7 +133,6 @@ function doSync() {
             }
             toastLog.innerHTML = '<div class="toast-log">' + escapeHtml(data.log) + '</div>';
             
-            // محو شدن بعد از ۲ ثانیه
             setTimeout(() => {
                 toast.style.opacity = '0';
                 setTimeout(() => {
@@ -182,7 +178,12 @@ function numToTime($num) {
     if ($num == -1000 || $num == 0 || $num == '' || $num < 0) return '-';
     $h = floor($num / 60);
     $m = $num % 60;
-    return str_pad($h, 2, '0', STR_PAD_LEFT) . ':' . str_pad($m, 2, '0', STR_PAD_LEFT);
+    $suffix = '';
+    if ($h >= 24) {
+        $h = $h - 24;
+        $suffix = '+';
+    }
+    return str_pad($h, 2, '0', STR_PAD_LEFT) . ':' . str_pad($m, 2, '0', STR_PAD_LEFT) . $suffix;
 }
 function timeToNum($time) {
     if (empty($time) || $time == '-' || $time == '00:00') return -1000;

@@ -57,6 +57,16 @@ function getDow($date_str) {
     return ($w + 1) % 7;
 }
 
+function getLeaveHoursForDay($rule, $dow_idx) {
+    $field = 'LeaveHoursNormal';
+    if ($dow_idx == 5) $field = 'LeaveHoursThursday';
+    elseif ($dow_idx == 6) $field = 'LeaveHoursFriday';
+    $val = $rule[$field] ?? '08:00';
+    $p = explode(':', $val);
+    if (count($p) == 2) return intval($p[0]) * 60 + intval($p[1]);
+    return 480;
+}
+
 $pcode_filter = $_GET['pcode'] ?? '';
 $search_filter = $_GET['search'] ?? '';
 $month_filter = $_GET['month'] ?? '1405/06';
@@ -179,30 +189,12 @@ $ym = explode('/', $month_filter);
 $year = intval($ym[0]); $month = intval($ym[1]);
 $days_in_month = ($month <= 6) ? 31 : (($month <= 11) ? 30 : 29);
 
-$total_work = 0; $total_ot = 0; $total_under = 0; $total_leave = 0; $total_hour_leave = 0;
+$total_work = 0; $total_ot = 0; $total_leave = 0;
 
 $monthly_leave_min = 0;
 if (!empty($rule['MonthlyLeaveHours'])) {
     $parts = explode(':', $rule['MonthlyLeaveHours']);
     if (count($parts) == 2) $monthly_leave_min = intval($parts[0]) * 60 + intval($parts[1]);
-}
-
-$thursday_work_min = 240;
-if (!empty($general['ThursdayWorkHours'])) {
-    $p = explode(':', $general['ThursdayWorkHours']);
-    if (count($p) == 2) $thursday_work_min = intval($p[0]) * 60 + intval($p[1]);
-}
-
-function getLeaveHoursForDay($rule, $dow_idx) {
-    // dow_idx: 0=شنبه ... 5=پنجشنبه, 6=جمعه
-    $field = 'LeaveHoursNormal';
-    if ($dow_idx == 5) $field = 'LeaveHoursThursday';
-    elseif ($dow_idx == 6) $field = 'LeaveHoursFriday';
-    
-    $val = $rule[$field] ?? '08:00';
-    $p = explode(':', $val);
-    if (count($p) == 2) return intval($p[0]) * 60 + intval($p[1]);
-    return 480;
 }
 
 $dow_names_full = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه'];
@@ -217,9 +209,8 @@ $dow_names_full = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','�
     </p>
     <p>
         <strong>مرخصی ماهانه:</strong> <?php echo htmlspecialchars($rule['MonthlyLeaveHours']); ?> &nbsp;|&nbsp;
-        <strong>مرخصی روز عادی:</strong> <?php echo htmlspecialchars($rule['LeaveHoursNormal']); ?> &nbsp;|&nbsp;
-        <strong>مرخصی پنجشنبه:</strong> <?php echo htmlspecialchars($rule['LeaveHoursThursday']); ?> &nbsp;|&nbsp;
-        <strong>مرخصی جمعه:</strong> <?php echo htmlspecialchars($rule['LeaveHoursFriday']); ?>
+        <strong>روش محاسبه مرخصی:</strong> 
+        <?php echo ($rule['LeaveCalcMethod'] == 'entry_exit_diff') ? 'اختلاف ورود/خروج با شیفت' : 'تفاضل کل'; ?>
     </p>
 </div>
 
@@ -227,7 +218,7 @@ $dow_names_full = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','�
 <table>
     <tr>
         <th>تاریخ</th><th>روز</th><th>شیفت</th><th>ورود</th><th>خروج</th>
-        <th>کارکرد</th><th>اضافه‌کاری</th><th>کم‌کاری</th><th>مرخصی</th><th>وضعیت</th>
+        <th>کارکرد</th><th>اضافه‌کاری</th><th>مرخصی</th><th>وضعیت</th>
     </tr>
     <?php for ($d = 1; $d <= $days_in_month; $d++):
         $date_str = sprintf('%04d/%02d/%02d', $year, $month, $d);
@@ -252,10 +243,11 @@ $dow_names_full = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','�
         $cal = $calendar[$date_str] ?? null;
         $att = $attendance[$date_str] ?? null;
         
-        $shift_name = '-'; $shift_color = ''; $shift_start = '-'; $shift_end = '-';
+        $shift_name = '-'; $shift_color = '';
         $expected = 480;
         $is_holiday = false; $has_shift = false; $no_shift = false;
         $is_night_shift = false;
+        $sh_start_min = 0; $sh_end_min = 0;
         
         if ($cal) {
             if ($cal['IsHoliday'] == 1) {
@@ -266,15 +258,13 @@ $dow_names_full = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','�
                 $s = $shifts[$cal['ShiftID']];
                 $shift_name = $s['ShiftName'];
                 $shift_color = $colors[$s['ColorCode']] ?? '#95a5a6';
-                if ($s['Start1']) $shift_start = $s['Start1'];
-                if ($s['End1']) $shift_end = $s['End1'];
-                $sh_start = timeToMin($s['Start1']);
-                $sh_end = timeToMin($s['End1']);
-                if ($sh_start > 0 && $sh_end > 0) {
-                    if ($sh_end <= $sh_start) $sh_end += 1440;
-                    $expected = $sh_end - $sh_start;
+                $sh_start_min = timeToMin($s['Start1']);
+                $sh_end_min = timeToMin($s['End1']);
+                if ($sh_start_min > 0 && $sh_end_min > 0) {
+                    if ($sh_end_min <= $sh_start_min) $sh_end_min += 1440;
+                    $expected = $sh_end_min - $sh_start_min;
                 }
-                if ($sh_start >= 1080) $is_night_shift = true;
+                if ($sh_start_min >= 1080) $is_night_shift = true;
                 if (!empty($s['End1']) && substr($s['End1'], -1) === '+') $is_night_shift = true;
             } else {
                 $no_shift = true;
@@ -287,17 +277,23 @@ $dow_names_full = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','�
             else { $shift_name = 'بدون شیفت'; }
         }
         
-        if ($is_thursday && !$is_holiday && $has_shift) $expected = $thursday_work_min;
-        
         $first_in = $att['Prc_FirstIn'] ?? -1000;
         $last_out = $att['Prc_LastOut'] ?? -1000;
         $first_in_orig = $first_in; $last_out_orig = $last_out;
         
+        $has_arrived = ($first_in > 0 && $last_out > 0);
+        
+        // رند کردن ورود
         if ($first_in > 0 && !empty($cur_general['RoundEntryEnabled'])) {
-            $first_in = roundTime($first_in, $cur_general['RoundBlockMinutes'], $cur_general['RoundThresholdMinutes']);
+            $eb = intval($cur_general['RoundEntryBlockMinutes'] ?? 15);
+            $et = intval($cur_general['RoundEntryThresholdMinutes'] ?? 6);
+            $first_in = roundTime($first_in, $eb, $et);
         }
+        // رند کردن خروج
         if ($last_out > 0 && !empty($cur_general['RoundExitEnabled'])) {
-            $last_out = roundTime($last_out, $cur_general['RoundBlockMinutes'], $cur_general['RoundThresholdMinutes']);
+            $xb = intval($cur_general['RoundExitBlockMinutes'] ?? 15);
+            $xt = intval($cur_general['RoundExitThresholdMinutes'] ?? 6);
+            $last_out = roundTime($last_out, $xb, $xt);
         }
         if ($first_in > 0 && $last_out > 0 && $last_out < $first_in) $last_out += 1440;
         
@@ -312,63 +308,87 @@ $dow_names_full = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','�
             if ($ts >= $first_in && $te <= $last_out && $te > $ts) $worked -= ($te - $ts);
         }
         
-        $ot = 0; $under = 0; $leave_min = 0;
-        $hour_leave_today = 0;
-        if ($att) {
+        $ot = 0; $leave_min = 0;
+        
+        // مرخصی ساعتی از Paradox (فقط اگه پرسنل اومده باشه)
+        if ($att && $has_arrived && !empty($cur_general['HourlyLeaveAsLeave'])) {
             $h1 = intval($att['Prc_HourEleaveSalary'] ?? 0);
             $h2 = intval($att['Prc_HourSleaveSalary'] ?? 0);
             $h3 = intval($att['Prc_HourleaveNoSalary'] ?? 0);
-            $hour_leave_today = $h1 + $h2 + $h3;
-            if (!empty($cur_general['HourlyLeaveAsLeave'])) $total_hour_leave += $hour_leave_today;
+            $leave_min += $h1 + $h2 + $h3;
         }
         
         if ($is_holiday && $worked > 0) {
             $ot = $worked;
         } elseif (!$is_holiday && $has_shift && $worked > 0) {
-            if ($worked > $expected) {
-                $ot = $worked - $expected;
-                
-                $s = $shifts[$cal['ShiftID']];
-                $sh_start_abs = timeToMin($s['Start1']);
-                $sh_end_abs = timeToMin($s['End1']);
-                if ($sh_end_abs <= $sh_start_abs) $sh_end_abs += 1440;
-                
-                $ot_start = $sh_end_abs;
-                $ot_end = $last_out;
-                
-                if ($is_night_shift) {
-                    $break_enabled = !empty($cur_general['NightDinnerEnabled']);
-                    $bs = timeToMin($cur_general['NightDinnerStart']);
-                    $be = timeToMin($cur_general['NightDinnerEnd']);
-                    if ($bs < $sh_start_abs) $bs += 1440;
-                    if ($be < $sh_start_abs) $be += 1440;
-                } else {
-                    $break_enabled = !empty($cur_general['LunchEnabled']);
-                    $bs = timeToMin($cur_general['LunchStart']);
-                    $be = timeToMin($cur_general['LunchEnd']);
-                    if ($bs < $first_in && $bs + 720 < $first_in) $bs += 1440;
-                    if ($be < $bs) $be += 1440;
-                }
-                
-                if ($break_enabled && $bs > 0 && $be > $bs && $bs >= $ot_start && $be <= $ot_end) {
-                    $deduct = $be - $bs;
-                    if ($ot > $deduct) $ot -= $deduct;
-                    else $ot = 0;
-                }
+            // === محاسبه OT بر اساس ورود قبل از شیفت و خروج بعد از شیفت ===
+            $sh_start_abs = $sh_start_min;
+            $sh_end_abs = $sh_end_min;
+            
+            // خروج بعد از پایان شیفت → OT
+            if ($last_out > $sh_end_abs) {
+                $ot += $last_out - $sh_end_abs;
+            }
+            // ورود قبل از شروع شیفت → OT
+            if ($first_in < $sh_start_abs) {
+                $ot += $sh_start_abs - $first_in;
+            }
+            
+            // کسر ناهار/شام از OT
+            $s = $shifts[$cal['ShiftID']];
+            if ($is_night_shift) {
+                $break_enabled = !empty($cur_general['NightDinnerEnabled']);
+                $bs = timeToMin($cur_general['NightDinnerStart']);
+                $be = timeToMin($cur_general['NightDinnerEnd']);
+                if ($bs < $sh_start_abs) $bs += 1440;
+                if ($be < $sh_start_abs) $be += 1440;
             } else {
-                $under = $expected - $worked;
+                $break_enabled = !empty($cur_general['LunchEnabled']);
+                $bs = timeToMin($cur_general['LunchStart']);
+                $be = timeToMin($cur_general['LunchEnd']);
+                if ($bs < $first_in && $bs + 720 < $first_in) $bs += 1440;
+                if ($be < $bs) $be += 1440;
+            }
+            
+            $ot_start = $sh_end_abs;
+            $ot_end = $last_out;
+            if ($break_enabled && $bs > 0 && $be > $bs && $bs >= $ot_start && $be <= $ot_end) {
+                $deduct = $be - $bs;
+                if ($ot > $deduct) $ot -= $deduct;
+                else $ot = 0;
+            }
+            
+            if ($ot < 0) $ot = 0;
+            
+            // === محاسبه مرخصی برای ورود دیرتر یا خروج زودتر ===
+            // این مستقل از OT محاسبه می‌شه
+            $late_min = ($first_in > $sh_start_abs) ? ($first_in - $sh_start_abs) : 0;
+            $early_min = ($last_out < $sh_end_abs) ? ($sh_end_abs - $last_out) : 0;
+            
+            if (!empty($cur_rule['LeaveCalcMethod']) && $cur_rule['LeaveCalcMethod'] == 'entry_exit_diff') {
+                // روش دوم: اختلاف ورود/خروج با شیفت
+                $leave_min += $late_min + $early_min;
+            } else {
+                // روش اول (تفاضل کل): فقط اگه کارکرد کمتر از شیفت باشه
+                // ولی OT حفظ می‌شه
+                if ($worked < $expected) {
+                    // محاسبه تفاضل کل (بدون کسر کردن از OT)
+                    $leave_min += ($expected - $worked);
+                }
             }
         } elseif ($has_shift && $worked == 0) {
-            // تردد نداشته → به اندازه ساعات مرخصی همان روز
-            if (!empty($cur_general['ShiftNoAttendanceAsLeave'])) {
-                $leave_min = getLeaveHoursForDay($cur_rule, $dow_idx);
+            // تردد نداشته → مرخصی روزانه
+            if (!empty($cur_rule['ShiftNoAttendanceAsLeave'])) {
+                $leave_min += getLeaveHoursForDay($cur_rule, $dow_idx);
             } else {
-                $under = $expected;
+                $default_leave_hours = [0=>480, 1=>480, 2=>480, 3=>480, 4=>480, 5=>240, 6=>0];
+                $leave_min += $default_leave_hours[$dow_idx] ?? 480;
             }
         }
         
-        $total_work += $worked; $total_ot += $ot; $total_under += $under; $total_leave += $leave_min;
+        $total_work += $worked; $total_ot += $ot; $total_leave += $leave_min;
         
+        // وضعیت
         $status = '';
         if ($exception_applied) $status .= '🔷 ';
         if ($is_holiday) {
@@ -376,10 +396,18 @@ $dow_names_full = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','�
             else $status .= ($cal['HolidayType'] == 'official') ? '🔴 تعطیل رسمی' : '🟠 تعطیل غیررسمی';
             if ($worked > 0 && !$no_shift) $status .= ' - اضافه‌کار';
         } elseif ($worked == 0) {
-            $status .= ($leave_min > 0) ? '🟣 مرخصی' : '⛔ غیبت';
-        } elseif ($under > 0) $status .= '🟡 کم‌کار';
-        elseif ($ot > 0) $status .= '🟢 اضافه‌کار';
-        else $status .= '✅ نرمال';
+            if ($leave_min > 0) $status .= '🟣 مرخصی';
+            elseif ($is_friday) $status .= '⚪ تعطیل (جمعه)';
+            else $status .= '⛔ غیبت';
+        } elseif ($leave_min > 0 && $ot == 0) {
+            $status .= '🟣 مرخصی';
+        } elseif ($leave_min > 0 && $ot > 0) {
+            $status .= '🟢 اضافه‌کار + 🟣 مرخصی';
+        } elseif ($ot > 0) {
+            $status .= '🟢 اضافه‌کار';
+        } else {
+            $status .= '✅ نرمال';
+        }
         
         echo "<tr>";
         echo "<td>$date_str</td>";
@@ -389,8 +417,7 @@ $dow_names_full = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','�
         echo "<td>" . minToStr($last_out % 1440) . ($last_out_orig != $last_out && $last_out > 0 ? " <small style='color:#e67e22;'>(از " . minToStr($last_out_orig) . ")</small>" : "") . "</td>";
         echo "<td>" . ($worked > 0 ? minToDur($worked) : '-') . "</td>";
         echo "<td style='color:#27ae60;'>" . ($ot > 0 ? minToDur($ot) : '-') . "</td>";
-        echo "<td style='color:#e74c3c;'>" . ($under > 0 ? minToDur($under) : '-') . "</td>";
-        echo "<td style='color:#9b59b6;'>" . ($leave_min > 0 ? minToDur($leave_min) : ($hour_leave_today > 0 ? minToDur($hour_leave_today) : '-')) . "</td>";
+        echo "<td style='color:#9b59b6;'>" . ($leave_min > 0 ? minToDur($leave_min) : '-') . "</td>";
         echo "<td>$status</td>";
         echo "</tr>";
     endfor; ?>
@@ -399,19 +426,17 @@ $dow_names_full = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','�
 
 <div class="card" style="background:#2c3e50; color:white;">
     <h2 style="margin-top:0; color:white;">📊 جمع کل ماه</h2>
-    <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:15px;">
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px;">
         <div style="text-align:center;"><div style="font-size:12px; color:#95a5a6;">کل کارکرد</div><div style="font-size:24px;"><?php echo minToDur($total_work); ?></div></div>
         <div style="text-align:center;"><div style="font-size:12px; color:#95a5a6;">کل اضافه‌کاری</div><div style="font-size:24px; color:#2ecc71;"><?php echo minToDur($total_ot); ?></div></div>
-        <div style="text-align:center;"><div style="font-size:12px; color:#95a5a6;">کل کم‌کاری</div><div style="font-size:24px; color:#e74c3c;"><?php echo minToDur($total_under); ?></div></div>
-        <div style="text-align:center;"><div style="font-size:12px; color:#95a5a6;">مرخصی روزانه</div><div style="font-size:24px; color:#9b59b6;"><?php echo minToDur($total_leave); ?></div></div>
-        <div style="text-align:center;"><div style="font-size:12px; color:#95a5a6;">مرخصی ساعتی</div><div style="font-size:24px; color:#e67e22;"><?php echo minToDur($total_hour_leave); ?></div></div>
+        <div style="text-align:center;"><div style="font-size:12px; color:#95a5a6;">کل مرخصی</div><div style="font-size:24px; color:#9b59b6;"><?php echo minToDur($total_leave); ?></div></div>
     </div>
     
-    <?php $total_used_leave = $total_leave + $total_hour_leave; $remaining = $monthly_leave_min - $total_used_leave; ?>
+    <?php $remaining = $monthly_leave_min - $total_leave; ?>
     <div style="margin-top:20px; padding-top:15px; border-top:1px solid #34495e;">
         <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px;">
             <div style="text-align:center;"><div style="font-size:12px; color:#95a5a6;">مرخصی مجاز ماهانه</div><div style="font-size:20px;"><?php echo minToDur($monthly_leave_min); ?></div></div>
-            <div style="text-align:center;"><div style="font-size:12px; color:#95a5a6;">مرخصی استفاده‌شده</div><div style="font-size:20px; color:#e74c3c;"><?php echo minToDur($total_used_leave); ?></div></div>
+            <div style="text-align:center;"><div style="font-size:12px; color:#95a5a6;">مرخصی استفاده‌شده</div><div style="font-size:20px; color:#e74c3c;"><?php echo minToDur($total_leave); ?></div></div>
             <div style="text-align:center;"><div style="font-size:12px; color:#95a5a6;">مانده مرخصی</div><div style="font-size:20px; color:<?php echo ($remaining >= 0) ? '#2ecc71' : '#e74c3c'; ?>;"><?php echo ($remaining >= 0 ? '+' : '') . minToDur(abs($remaining)); ?></div></div>
         </div>
     </div>
